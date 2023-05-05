@@ -1,0 +1,486 @@
+---
+title: "Act3 GWR"
+author: "Equipo 1"
+date: "2023-04-25"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: FALSE
+    toc_float:
+      smooth_scroll: FALSE
+      collapsed: FALSE
+  
+---
+<style>
+#TOC {
+  color: #708090
+  font-family: Calibri;
+  font-size: 16px;
+  border-color: #708090;
+}
+body {
+  color: #708090;
+  font-family: Calibri; 
+  background-color: #F5F5F5;
+}
+pre {
+  color: #708090;
+  background-color: #F8F8FF;
+}
+#header{
+  color: darkcyan;
+  background-color: aliceblue;
+  opacity: 0.8;
+  font-family: Calibri;
+  font-size: 20px;
+}
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load libraries
+```{r message=FALSE, warning=FALSE}
+library(sf)
+library(tmap)
+library(spdep)
+library(rgdal)
+library(tidyverse)
+library(tigris)
+library(mapview)
+library(GWmodel)    
+library(regclass)
+library(viridis)
+library(grid)
+library(RColorBrewer)
+library(rgeoda)
+library(sjPlot)
+library(jtools)
+library(dlookr)
+library(terra)
+library(ggpubr)
+library(rstatix)
+```
+
+Set directory
+```{r warning=FALSE}
+getwd()
+setwd("C:/Users/ntybl/OneDrive/Documents/Semestre 8/Datos")
+getwd()
+```
+
+Importing non-spatial data and geospatial data (shapefile)
+Unir las bases de datos para poder crear los mapas 
+```{r warning=FALSE}
+covid_shpf <-  readOGR(dsn = "C:\\Users\\ntybl\\Downloads\\spda_covid19 (3)\\spda_covid19\\shp_mx_mpios\\mx_mpios.shp")
+covid_df <- read.csv("C:\\Users\\ntybl\\OneDrive\\Documents\\Semestre 8\\Datos\\datosFinal.csv")
+covid_j <- geo_join(covid_shpf,covid_df,'IDUNICO','IDUNICO',how='inner') ### Combining geospatial and non-spatial data
+
+```
+# Limpieza de datos 
+
+```{r}
+summary(covid_shpf)
+```
+
+```{r}
+summary(covid_df)
+```
+Convertir a numeric 
+```{r warning=FALSE}
+covid_df$porcentaje_pob_acceso_ss <- as.numeric(covid_df$porcentaje_pob_acceso_ss)
+covid_df$porcentaje_pob_pobreza <- as.numeric(covid_df$porcentaje_pob_pobreza)
+covid_df$porcentaje_pob_servicios_salud <- as.numeric(covid_df$porcentaje_pob_servicios_salud)
+covid_df$hogremjefmuj2015 <- as.numeric(covid_df$hogremjefmuj2015)
+covid_df$tasa_covid <- as.numeric(covid_df$tasa_covid)
+covid_df$hogrem2015 <- as.numeric(covid_df$hogrem2015)
+covid_df$popnoafmed2015 <- as.numeric(covid_df$popnoafmed2015)
+covid_df$gini2015 <- as.numeric(covid_df$gini2015)
+covid_df$popden2020 <- as.numeric(covid_df$popden2020)
+covid_df$porcentaje_pob_pobreza_ext <- as.numeric(covid_df$porcentaje_pob_pobreza_ext)
+```
+Convertir a factor 
+```{r}
+covid_df$REGION <- as.factor(covid_df$REGION)
+
+```
+
+
+Convertir NA a la mediana
+```{r}
+covid_df <- covid_df %>% mutate(across(where(is.numeric), ~ replace_na(., median(., na.rm = TRUE))))
+```
+
+Cambiar 0 a 0.01
+```{r}
+covid_df$tasa_covid <- replace(covid_df$tasa_covid, covid_df$tasa_covid == 0, 0.01)
+covid_df$crimen_2019 <- replace(covid_df$crimen_2019, covid_df$crimen_2019 == 0, 0.01)
+
+```
+
+```{r}
+summary(covid_j)
+```
+
+Convertir a numeric
+```{r warning=FALSE}
+covid_j$hogrem2015 <- as.numeric(covid_j$hogrem2015)
+covid_j$hogremjefmuj2015 <- as.numeric(covid_j$hogremjefmuj2015)
+covid_j$popnoafmed2015 <- as.numeric(covid_j$popnoafmed2015)
+covid_j$gini2015 <- as.numeric(covid_j$gini2015)
+covid_j$popden2020 <- as.numeric(covid_j$popden2020)
+covid_j$porcentaje_pob_pobreza <- as.numeric(covid_j$porcentaje_pob_pobreza)
+covid_j$porcentaje_pob_pobreza_ext <- as.numeric(covid_j$porcentaje_pob_pobreza_ext)
+covid_j$porcentaje_pob_servicios_salud <-  as.numeric(covid_j$porcentaje_pob_servicios_salud)
+covid_j$porcentaje_pob_acceso_ss <- as.numeric(covid_j$porcentaje_pob_acceso_ss)
+covid_j$tasa_covid <- as.numeric(covid_j$tasa_covid)
+```
+Cambiar 0 por 0.01
+```{r}
+covid_j$crimen_2019[covid_j$crimen_2019 == 0 ] <- 0.01
+covid_j$tasa_covid[covid_j$tasa_covid == 0 ] <- 0.01
+covid_j$hogremjefmuj2015[covid_j$hogremjefmuj2015 == 0] <- 0.01
+covid_j$REGION <- as.factor(covid_j$REGION)
+```
+
+Cambiar NAs por la mediana 
+```{r}
+
+covid_j$n[is.na(covid_j$n)] <- 11.00
+covid_j$porcentaje_pob_servicios_salud[is.na(covid_j$porcentaje_pob_servicios_salud)] <- 23.22
+covid_j$porcentaje_pob_acceso_ss[is.na(covid_j$porcentaje_pob_acceso_ss)] <- 76.46
+covid_j$porcentaje_pob_pobreza[is.na(covid_j$porcentaje_pob_pobreza)] <- 62.60
+covid_j$porcentaje_pob_pobreza_ext[is.na(covid_j$porcentaje_pob_pobreza_ext)] <- 12.48
+```
+
+
+# Objetivos 
+
+- Predecir los factores asociados con el incremento / disminución de casos confirmados de COVID-19
+
+- Visualizar y analizar clusters en nuestras variables de interés 
+
+- Estimación regresión espacial global y local
+
+- Comparar los resultados de las diferentes regresiones que se realizaran 
+
+# Visualización de las variables  
+
+visualización de casos confirmados de covid 19 y factores socioeconómicos
+```{r}
+qtm(covid_j, "tasa_covid")
+```
+En el mapa anterior podemos visualizar los casos de COVID confirmados en una taza de cada 10 por el total de casos, podemos notar concentraciones en 3 áreas especificas estas siendo Baja California sur, Tabasco, Nuevo León y una alta concentración en el Estado de México. 
+
+```{r}
+qtm(covid_j, "rezago_social")
+#mapview(covid_j, zcol="rezago_social")
+
+```
+En el mapa anterior se pueden visualizar clusters podemos visualizar un alto grado de rezago social en la región norte del país a lo largo de los estados de Sonora, Chihuahua, Sinaloa, Durango y Nayarit. 
+
+En cuanto al centro y sur del país podemos visualizar concentraciones de rezago social a lo largo de estas regiones. 
+
+H0: La distribución del rezago social por estado se distribuye aleatoriamente.
+H1: La distribución del rezago social por estado no se distribuye aleatoriamente,
+hay conglomerados (autocorrelación positiva) o valores atípicos (autocorrelación negativa)
+
+Modelado de vecinos espaciales y matrices de conectividad espacial
+```{r}
+swm_queen2 <- poly2nb(covid_shpf, queen = TRUE)
+summary(swm_queen2)
+```
+
+Resumen de la matriz de peso espacial
+Hay 2,456 municipios en México
+La unidad de área más conectada tiene 22 vecinos
+La unidad del área menos conectada tiene 1 vecino
+
+```{r}
+swm_rook2 <- poly2nb(covid_shpf, queen = FALSE)
+summary(swm_rook2)
+```
+Trazado de mapas de vecinos basados en la contigüidad de queen
+```{r warning=FALSE}
+plot(covid_shpf, borders = 'lightgrey') 
+plot(swm_queen2, coordinates(covid_shpf), pch = 19, cex = 0.6, add = TRUE, col = "red")
+title(main = "Contigüidad Queen", cex.main = 0.9)
+```
+
+Trazado de mapas de vecinos basados en la contigüidad de rook
+```{r warning=FALSE}
+plot(covid_shpf, borders = 'lightgrey') 
+plot(swm_rook2, coordinates(covid_shpf), pch = 19, cex = 0.6, add = TRUE, col = "red")
+title(main = "Contigüidad Rook", cex.main = 0.9)
+```
+
+Cálculo de vecinos basados en distancia
+```{r}
+coords2 <- coordinates(covid_shpf)
+head(coords2)
+```
+
+```{r}
+knn2 <- knn2nb(knearneigh(coords2))
+knn1_dist2 <- unlist(nbdists(knn2, coords2, longlat = TRUE))
+summary(knn1_dist2)
+```
+En promedio, ¿cada municipio es el más cercano en distancia a otras 122 áreas de puntos?
+```{r}
+dwm2 <- dnearneigh(coords2, 0 ,98, longlat = TRUE)
+dwm2 
+
+```
+
+
+
+```{r}
+rswm_queen2 <- nb2listw(swm_queen2, style = "W", zero.policy = TRUE)
+rswm_queen2
+```
+
+Vamos a crear un spatial lag de la variable del conjunto de datos.
+```{r}
+covid_j$sp_rezago_social<- lag.listw(rswm_queen2, covid_j$rezago_social, zero.policy = TRUE)
+```
+
+```{r}
+qtm(covid_j, "rezago_social" )
+```
+
+
+
+```{r}
+qtm(covid_j, "sp_rezago_social")
+```
+
+En los mapas anteriores se comparar el rezago social en México y el spatial lag de rezago social, podemos notar una mayor concentración en el mapa de lag tanto en negativo como en positivo a comparación del mapa sin lag, la principal observación seria que el mapa de spatial lag muestra una alta concentración entre los valores de -1 a 0. también podemos notar más valores positivos entre 1 y 2 a comparación del mapa de rezago.
+
+
+Moran's I Test
+
+Identificar y medir la autocorrelación espacial
+
+```{r}
+moran.test(covid_j$rezago_social, listw = rswm_queen2, zero.policy = TRUE, na.action = na.omit)
+```
+En conclusión, los resultados sugieren que existe una autocorrelación espacial positiva significativa en la variable analizada, lo que indica que las ubicaciones vecinas tienden a tener valores similares.
+
+Computar el correlograma I de moran
+```{r}
+Moran_cor <- sp.correlogram(swm_queen2, covid_j$rezago_social, order = 6, method = "I", style = "B")
+plot(Moran_cor)
+
+```
+
+En general, el correlograma indica que existe una autocorrelación espacial positiva en la variable que se analiza, con observaciones vecinas que tienen valores similares. La fuerza de la autocorrelación espacial se debilita gradualmente a medida que aumenta la distancia entre las observaciones, y el efecto de las observaciones vecinas disminuye más allá de cierta distancia.
+
+
+Exploremos el análisis de datos espaciales y modelemos las relaciones espaciales locales
+
+
+A continuación, haremos un normality plot para analizar la distribución de las variables y concluir si estas necesitan ser alteradas 
+
+```{r}
+plot_normality(covid_df, hogremjefmuj2015, crimen_2019, porcentaje_pob_pobreza, porcentaje_pob_servicios_salud, porcentaje_pob_acceso_ss, rezago_social, porcentaje_pob_pobreza, tasa_covid)
+```
+
+
+En base a los resultados usaremos log en las variables: tasa_covid (variable dependiente) y  crimen_2019. 
+
+# Regresion no espacial 
+
+```{r}
+non_spatial_model2 = lm(log(tasa_covid) ~ hogremjefmuj2015 + log(crimen_2019) + porcentaje_pob_servicios_salud + porcentaje_pob_acceso_ss + rezago_social + porcentaje_pob_pobreza + REGION, data = covid_df) 
+
+summary(non_spatial_model2)
+VIF(non_spatial_model2)
+```
+Interpretacion: 
+
+- El intercepto tiene un valor estimado de 5,717, que representa el valor esperado de la variable dependiente cuando todas las variables independientes son iguales a cero.
+
+- El valor R-cuadrado de 0.3482 sugiere que aproximadamente el 34.82 % de la varianza de la variable dependiente puede explicarse por las variables independientes.
+
+- El F-statistic de 145.4 con un p-value de < 2.2e-16 sugiere que el modelo en su conjunto es estadísticamente significativo.
+
+- Los residuos tienen un valor mínimo de -8.7896 y un valor máximo de 3.5079, con una media de aproximadamente cero, lo que indica que la suposición de errores normalmente distribuidos es razonable.
+
+-La varible porcentaje_pob_pobreza muestra un VIF de 5.116764 esta muestra multicollinearity por lo cual será removida del modelo.
+
+```{r}
+AIC(non_spatial_model2)
+```
+
+
+# Global Spatial Regression Analysis
+
+Convertir a sp
+
+```{r}
+covid.sp = as(covid_shpf, "Spatial")
+
+```
+
+
+```{r}
+spatial_auto <- lagsarlm(log(tasa_covid) ~ hogremjefmuj2015 + log(crimen_2019) + porcentaje_pob_servicios_salud + porcentaje_pob_acceso_ss + rezago_social + porcentaje_pob_pobreza + REGION, data = covid_j, listw = rswm_queen2, Durbin = FALSE)
+summary(spatial_auto)
+```
+- El AIC del modelo Global Spatial Regression es 8590.8, que es inferior al AIC del modelo de Regresion no espacial (8790.453).
+
+
+Detección de residuos de regresión espacialmente autocorrelacionados
+
+```{r}
+moran.test(exp(spatial_auto$residuals), rswm_queen2)
+
+```
+
+El p-value de 2.2e-16 indica que la hipótesis nula (es decir, la ausencia de autocorrelación espacial) se puede rechazar con un grado de confianza muy alto. La hipótesis alternativa es mayor, lo que significa que los datos exhiben una autocorrelación espacial positiva.
+
+Los resultados indican que existe una fuerte autocorrelación espacial positiva presente en los datos
+
+
+# Local Spatial Regression Analysis
+
+Determinar kernel bandwidth
+
+El modelo de Kennel Barwidth nos demuestra a qué distancia dos objetos deben estar para darle significancia o tener influencia en los resultados. Una distancia cercana indica que las estimaciones están cerca de los datos mientras que una distancia lejana proporciona una transición más fácil de realizar. 
+
+```{r}
+
+bw4 <- bw.gwr(log(tasa_covid) ~ hogremjefmuj2015 + log(crimen_2019) + porcentaje_pob_servicios_salud + porcentaje_pob_acceso_ss + rezago_social,
+              approach = "AIC", adaptive = T, data=covid_j)
+
+```
+
+
+```{r}
+bw5 <- bw.gwr(log(tasa_covid) ~ hogremjefmuj2015 + log(crimen_2019) + porcentaje_pob_servicios_salud + porcentaje_pob_acceso_ss + rezago_social,
+              approach = "AIC", adaptive = F, data=covid_j)
+
+```
+
+Modelo GWR 
+```{r}
+m.gwr2 <- gwr.basic(log(tasa_covid) ~ hogremjefmuj2015 + log(crimen_2019) + porcentaje_pob_servicios_salud + porcentaje_pob_acceso_ss + rezago_social,
+                    adaptive = T, data = covid_j, bw = bw4)
+m.gwr2
+```
+
+- El intercepto tiene un valor estimado de 4.57949, que representa el valor esperado de la variable dependiente cuando todas las variables independientes son iguales a cero.
+
+- El valor R-cuadrado de 0.3093 sugiere que aproximadamente el 30.93 % de la varianza de la variable dependiente puede explicarse por las variables independientes.
+
+- El F-statistic de 219.5 con un p-value de < 2.2e-16 sugiere que el modelo en su conjunto es estadísticamente significativo.
+
+- Los residuos tienen un valor mínimo de -8.5549 y un valor máximo de 5.4171, con una media de aproximadamente cero, lo que indica que la suposición de errores normalmente distribuidos es razonable.
+
+Mapeo de output GWR
+```{r}
+gwr_sf2 = st_as_sf(m.gwr2$SDF)
+gwr_sf2
+```
+
+Predicción local de la variable dependiente
+```{r}
+gwr_sf2$y_predicted <- exp(gwr_sf2$yhat)
+qtm(gwr_sf2, "y_predicted")
+#mapview(gwr_sf2, zcol = "y_predicted")
+```
+El mapa representa la variable dependiente por municipios. Como podemos observar, la mayoría de los municipios caen en la categoría más baja de 0-500. Sin embargo, se puede observar que en la región del centro se encuentran valores que exceden y brincan hacia la siguiente categoría indicando un margen de posibilidad más alto.
+
+Predicción local de variables explicativas estadísticamente significativas
+```{r}
+qtm(gwr_sf2, "hogremjefmuj2015_TV")
+qtm(gwr_sf2, "porcentaje_pob_acceso_ss_TV")
+#mapview(gwr_sf2, zcol = "hogremjefmuj2015_TV")
+#mapview(gwr_sf2, zcol = "porcentaje_pob_acceso_ss_TV")
+```
+
+El mapa presentado a continuación provee la descripción de las variables explicativas en el país. La mayoría del país contiene valores positivos bajos con valores de 2-4 en todo el país. De igual manera si existen municipios en estados de las regiones Norte y Noroeste que generan valores negativos y existen municipios minúsculos que pertenecen a la misma categoría. 
+
+Predicción local de R2
+```{r}
+qtm(gwr_sf2, "Local_R2")
+#mapview(gwr_sf2, zcol = "Local_R2")
+```
+
+La predicción local de R al cuadrado tiene como valores más altos los estados de los municipios en la región Norte y Noroeste. Las regiones del centro y sur son las que categóricamente hablando juntaron el valor mínimo.
+
+Residuos de regresión local
+```{r}
+qtm(gwr_sf2, "residual")
+#mapview(gwr_sf2, zcol = "residual")
+```
+
+
+A excepción de algunos estados singulares en dispersión a lo largo del país, la mayoría de los municipios no generó valores negativos en cuanto a la regresión local lo cual indica correlación positiva. 
+
+Visualizar más de 2 variables explicativas
+```{r}
+map_4 <- tm_shape(gwr_sf2) + 
+  tm_polygons(col = "hogremjefmuj2015_TV", style = "quantile", palette = "BuGn", title = "P-Value de jefa de familia")
+map_5 <- tm_shape(gwr_sf2) + 
+  tm_polygons(col = "porcentaje_pob_acceso_ss_TV", style = "quantile", palette = "-BuGn", title = "P-Value de porcentaje poblacion con acceso a ss")
+tmap_arrange(map_4, map_5, ncol = 2)
+```
+
+Podemos notar una alta concentración de valores negativos en porcentaje de población con acceso a servicio social a lo largo del país. 
+
+
+Los principales hallazgos basados en resultados locales.
+
+Tabla de coeficientes GWR
+```{r}
+gwr_table2 = apply(m.gwr2$SDF@data[,1:7], 2, summary)
+
+```
+
+
+Coeficientes OLS
+```{r}
+non_spatial_model2_table = coef(non_spatial_model2)
+```
+
+Juntarlos con un row link
+```{r message=FALSE, warning=FALSE}
+table33 <- rbind(gwr_table2, non_spatial_model2_table)
+```
+
+Agregar nombre a la última fila de la pestaña
+```{r}
+rownames(table33) [7] <- "Global"
+```
+
+Transpose tab
+Resumen de modelos estimados no espaciales y GWR
+```{r}
+table33 <- t(round(table33, 3))
+table33
+```
+
+# Hallazgos
+
+- Los resultados de la regresión local que muestra la estimación del modelo GWR indican un AIC más bajo que los resultados de la regresión global espacial y no espacial. Basandonos en el  AIC más bajo, seleccionamos el GWR
+
+- Jefa de familia que recibe remesas es una variable estadística mente significativa en cuanto a la detección de casos confirmados de COVID -19 en México la mayor concentración de esta variable se observa en las regiones centro norte y sur del país. 
+
+- Local R2 es significativamente alta en las regiones turísticas (playas), la capital del país, Nuevo León y la zona fronteriza de Tamaulipas. 
+
+
+# Recomendaciones 
+
+- Dentro de las variables explicativas, el porcentaje de la población que tiene acceso a ss es negativo en casi todo el país. Esto demuestra que hay áreas de oportunidad para incrementar estos porcentajes en estos sectores
+
+- La dispersión entre máximo y mínimo en la variable de crimen contiene valores muy cercanos, por lo que se recomienda usar el modelo Kennel Bardwith para una transición más sencilla en la aplicación. 
+
+- Como se observó en los mapas que utilizan la variable de rezago social este tiene concentraciones altas en ciertas áreas de la región norte pero una gran distribución a lo largo de la región sur por lo tanto se recomienda implementar actividades socioeconómicas que beneficien a esta región para que el rezago social tenga una distribución normal a lo largo de México.  
+
+# Conclusión 
+
+En conclusión podemos determinar que los modelos de regresión no espacial y global espacial muestran resultados significativos en cuanto a la explicación de la variable predictiva en este caso tasa de covid sin embargo el modelo de regresión espacial local muestra mejores resultados en cuanto a la relación de las variables explicativas y la variable dependiente. 
